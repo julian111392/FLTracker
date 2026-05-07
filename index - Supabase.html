@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FRONTLINE - Job Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f4f4f9; }
+        .app-container { display: flex; height: 100vh; flex-direction: column; }
+        .main-content { display: flex; flex: 1; overflow: hidden; }
+
+        .search-results-header {
+            display: grid;
+            grid-template-columns: 80px 1fr 100px;
+            background: #f1f1f1;
+            font-weight: bold;
+            font-size: 0.75em;
+            padding: 5px;
+            border-bottom: 2px solid #ccc;
+            position: sticky;
+            top: 0;
+        }
+
+        .search-result-row {
+            display: grid;
+            grid-template-columns: 80px 1fr 100px;
+            gap: 5px;
+            padding: 8px 5px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.75em;
+            cursor: pointer;
+            align-items: center;
+        }
+
+        .search-result-row:hover { background-color: #e7f3ff; }
+        
+        #sidebar { 
+            width: 380px; 
+            padding: 20px; 
+            background: white; 
+            border-right: 2px solid #ddd; 
+            overflow-y: auto; 
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+        }
+        
+        #map { flex: 1; background: #ddd; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.9em; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        
+        button { cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
+        #lookupBtn { background: #7a7d6c; color: white; width: 80px; }
+        #saveBtn { background: #007bff; color: white; width: 100%; padding: 15px; margin-top: 10px; font-size: 1em; }
+        
+        .stats { font-weight: bold; color: #333; margin-bottom: 10px; }
+        hr { border: 0; border-top: 1px solid #eee; margin: 20px 0; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="main-content">
+        <div id="sidebar">
+            <h2 style="margin-top: 0;">Project Manager</h2>
+            <div class="stats" id="job-count">Loading jobs...</div>
+
+            <div id="search-section" style="background: #e9ecef; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;">
+                <h4 style="margin-top:0">Search Filters</h4>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="form-group">
+                        <label>Job Number</label>
+                        <input type="text" id="search_job_num" placeholder="Ex: 28705">
+                    </div>
+                    <div class="form-group">
+                        <label>County</label>
+                        <select id="search_county"><option value="">All Counties</option></select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Subdivision</label>
+                    <select id="search_subdivision"><option value="">All Subdivisions</option></select>
+                </div>
+
+                <div class="form-group">
+                    <label>Address</label>
+                    <input type="text" id="search_address" placeholder="Search Street Name...">
+                </div>
+
+                <div class="form-group">
+                    <label>Client Name</label>
+                    <select id="search_client"><option value="">All Clients</option></select>
+                </div>
+
+                <div class="form-group">
+                    <label>Project Type</label>
+                    <select id="search_type">
+                        <option value="">All Types</option>
+                        <option value="Residential House Stake">Residential House Stake</option>
+                        <option value="Residential House Location Plan">Residential House Location</option>
+                        <option value="Residential Foundation Survey">Residential Foundation Survey</option>
+                        <option value="Residential Drainage Plan">Residential Drainage Plan</option>
+                        <option value="Residential LGP">Residential LGP</option>
+                        <option value="Residential Boundary As-Built">Residential Boundary As-Built</option>
+                        <option value="Residential Boundary Control">Residential Boundary Control</option>
+                        <option value="Residential Aerial Topo Survey">Residential Aerial Topo Survey</option>
+                        <option value="Residential Arborist Report">Residential Arborist Report</option>
+                        <option value="Residential Asbuilt">Residential Asbuilt</option>
+                        <option value="Residential Basement Stake">Residential Basement Stake</option>
+                        <option value="Residential Composite Map">Residential Composite Map</option>
+                        <option value="Residential Concrete Check">Residential Concrete Check</option>
+                        <option value="Residential Construction Staking">Residential Construction Staking</option>
+                        <option value="Residential Courthouse Researc">Residential Courthouse Researc</option>
+                        <option value="Residential Curb Painting">Residential Curb Painting</option>
+                        <option value="Residential Data Reduction">Residential Data Reduction</option>
+                        <option value="Residential Demo Plan">Residential Demo Plan</option>
+                        <option value="Residential Drainage Study">Residential Drainage Study</option>
+                        <option value="Residential Easement Plat">Residential Easement Plat</option>
+                        <option value="Residential Elevation Cert">Residential Elevation Cert</option>
+                        <option value="Residential Exhibit">Residential Exhibit</option>
+                        <option value="Residential Extra">Residential Extra</option>
+                        <option value="Residential Exemption Plat">Residential Exemption Plat</option>
+                        <option value="Residential FHA Plot Plan">Residential FHA Plot Plan</option>
+                        <option value="Residential Final Survey">Residential Final Survey</option>
+                        <option value="Residential Flood Letter">Residential Flood Letter</option>
+                        <option value="Residential Found. Elev Check">Residential Found. Elev Check</option>
+                        <option value="Residential Global Positioning Control Pts.">Residential Global Positioning Control Pts.</option>
+                        <option value="Residential Height Elevation">Residential Height Elevation</option>
+                        <option value="Residential House Fit">Residential House Fit</option>
+                        <option value="Residential Hydrology Study">Residential Hydrology Study</option>
+                        <option value="Residential Land Disturbance Permit">Residential Land Disturbance Permit</option>
+                        <option value="Residential Legal Description">Residential Legal Description</option>
+                        <option value="Exhibit Plat">Exhibit Plat</option>
+                        <option value="Residential Loan Survey">Residential Loan Survey</option>
+                        <option value="Residential LOMA">Residential LOMA</option>
+                        <option value="Residential Lot Division">Residential Lot Division</option>
+                        <option value="Residential Lot Consolidation">Residential Lot Consolidation</option>
+                        <option value="Residential Matrix">Residential Matrix</option>
+                        <option value="Residential NOI">Residential NOI</option>
+                        <option value="Residential Pad Elevation">Residential Pad Elevation</option>
+                        <option value="Residential Pin Setting">Residential Pin Setting</option>
+                        <option value="Residential Presentation Stake">Residential Presentation Stake</option>
+                        <option value="Residential Property Line Stake">Residential Property Line Stake</option>
+                        <option value="Residential Revision">Residential Revision</option>
+                        <option value="Residential Septic Plan">Residential Septic Plan</option>
+                        <option value="Residential Site Distance Surv">Residential Site Distance Surv</option>
+                        <option value="Residential Site Plan">Residential Site Plan</option>
+                        <option value="Residential Subdivision">Residential Subdivision</option>
+                        <option value="Residential Tertiary">Residential Tertiary</option>
+                        <option value="Residential Topographic Survey">Residential Topographic Survey</option>
+                        <option value="Residential Limited Topo">Residential Limited Topo</option>
+                        <option value="Residential Topo (GIS)">Residential Topo (GIS)</option>
+                        <option value="Residential Travel Time">Residential Travel Time</option>
+                        <option value="Residential Tree Location">Residential Tree Location</option>
+                        <option value="Residential Utility Location">Residential Utility Location</option>
+                        <option value="Residential Variance Plat">Residential Variance Plat</option>
+                        <option value="Residential Water Quality Cert">Residential Water Quality Cert</option>
+                        <option value="Residential Wetlands Location">Residential Wetlands Location</option>
+                        <option value="Residential Zoning Plan">Residential Zoning Plan</option>
+                        <option value="Commercial ALTA/ACSM">Commercial ALTA/ACSM</option>
+                        <option value="Commercial ALTA/NSPS">Commercial ALTA/NSPS</option>
+                        <option value="Commercial Arborist Report">Commercial Arborist Report</option>
+                        <option value="Commercial As-built">Commercial As-built</option>
+                        <option value="Commercial Boundary Control">Commercial Boundary Control</option>
+                        <option value="Commercial Boundary As-Built">Commercial Boundary As-Built</option>
+                        <option value="Commercial Building Staking">Commercial Building Staking</option>
+                        <option value="Commercial Composite Map">Commercial Composite Map</option>
+                        <option value="Commercial Construction Staking">Commercial Construction Staking</option>
+                        <option value="Commercial Courthouse Research">Commercial Courthouse Research</option>
+                        <option value="Commercial Easement Plat">Commercial Easement Plat</option>
+                        <option value="Commercial Elevation Cert">Commercial Elevation Cert</option>
+                        <option value="Commercial Exemption Plat">Commercial Exemption Plat</option>
+                        <option value="Commercial Extra">Commercial Extra</option>
+                        <option value="Commercial Expert Witness">Commercial Expert Witness</option>
+                        <option value="Commercial Final Survey">Commercial Final Survey</option>
+                        <option value="Commercial Flood Study">Commercial Flood Study</option>
+                        <option value="Commercial Foundation Survey">Commercial Foundation Survey</option>
+                        <option value="Commercial GPS">Commercial GPS</option>
+                        <option value="Commercial Legal Certificate">Commercial Legal Certificate</option>
+                        <option value="Commercial Legal Description">Commercial Legal Description</option>
+                        <option value="Commercial Liquor License">Commercial Liquor License</option>
+                        <option value="Commercial Pin Setting">Commercial Pin Setting</option>
+                        <option value="Commercial Property Line Stake">Commercial Property Line Stake</option>
+                        <option value="Commercial Revision">Commercial Revision</option>
+                        <option value="Commercial Right of Way Survey">Commercial Right of Way Survey</option>
+                        <option value="Sediment Erosion Control Plan">Sediment Erosion Control Plan</option>
+                        <option value="Commercial Sewer Profile">Commercial Sewer Profile</option>
+                        <option value="Commercial Storm Profile">Commercial Storm Profile</option>
+                        <option value="Commercial Subdivision">Commercial Subdivision</option>
+                        <option value="Commercial Title Search">Commercial Title Search</option>
+                        <option value="Commercial Topographic Survey">Commercial Topographic Survey</option>
+                        <option value="Commercial Limited Topo">Commercial Limited Topo</option>
+                        <option value="Commercial GIS Topographic">Commercial GIS Topographic</option>
+                        <option value="Commercial Travel Time">Commercial Travel Time</option>
+                        <option value="Commercial Tree Location">Commercial Tree Location</option>
+                        <option value="Commercial Utility Location">Commercial Utility Location</option>
+                        <option value="Commercial Variance">Commercial Variance</option>
+                        <option value="Commercial Wetlands">Commercial Wetlands</option>
+                        <option value="Commercial Zoning Letter">Commercial Zoning Letter</option>
+                        <option value="Commercial Zoning Plan">Commercial Zoning Plan</option>
+                        <option value="RB/RA">RB/RA</option>
+                        <option value="RDP/RE">RDP/RE</option>
+                        <option value="RFS/RE">RFS/RE</option>
+                        <option value="RHS/RE">RHS/RE</option>
+                        <option value="OHLP/RE">OHLP/RE</option>
+                        <option value="LGP/RE">LGP/RE</option>
+                        <option value="OHLP/RFS">OHLP/RFS</option>
+                        <option value="RHS/RPS">RHS/RPS</option>
+                        <option value="TER/RE">TER/RE</option>
+                        <option value="VAR/RE">VAR/RE</option>
+                        <option value="Cancelled">Cancelled</option>
+                        <option value="Engineering">Engineering</option>
+                        <option value="Miscellaneous">Miscellaneous</option>
+                        <option value="Printing/Reprographic Services">Printing/Reprographic Services</option>
+                        <option value="Redo">Redo</option>
+                        <option value="Multi-Phase Project">Multi-Phase Project</option>
+                    </select>
+                </div>
+                <div class="form-group">
+    <label>Date Entered</label>
+    <input type="date" id="search_date">
+</div>
+
+                <button id="applyFiltersBtn" style="width:100%; margin-top:10px; padding: 12px; background:#6c757d; color:white; border:none; border-radius:4px; font-weight:bold;">Search</button>
+                <button id="resetFiltersBtn" style="width:100%; margin-top:5px; background:none; border:none; color:#666; font-size:0.8em;">Reset All</button>
+
+                <div id="searchResultsList" style="max-height: 400px; overflow-y: auto; margin-top: 15px; background: white; border-radius: 4px; border: 1px solid #ccc;"></div>
+            </div>
+
+            <hr>
+            <button id="openModalBtn" style="width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">
+                + LOG NEW JOB
+            </button>
+        </div>
+
+        <div id="map"></div>
+    </div>
+</div>
+
+<div id="jobModal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
+    <div style="background-color: white; margin: 5% auto; padding: 25px; border-radius: 8px; width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative;">
+        <span id="closeModal" style="position: absolute; right: 20px; top: 10px; font-size: 28px; cursor: pointer;">&times;</span>
+        <h2 style="margin-top: 0;">Log New Job</h2>
+        <div class="form-group">
+            <label>Job Number</label>
+            <input type="text" id="new_job_number">
+        </div>
+        <div class="form-group">
+            <label>Address Lookup</label>
+            <div style="display: flex; gap: 5px;">
+                <input type="text" id="address_search" placeholder="123 Main St, City, GA">
+                <button id="lookupBtn" style="background:#6c757d; color:white; padding:0 10px;">Locate</button>
+            </div>
+        </div>
+        <div class="form-group">
+        <label>County</label>
+        <select id="new_county">
+            <option value="">-- Select County --</option>
+        </select>
+    </div>
+        <div class="form-group">
+        <label>Lot Number</label>
+        <input type="text" id="new_lot_number" placeholder="Ex: 42">
+    </div>
+        <div class="form-group">
+    <label>Subdivision</label>
+    <div id="sub_dropdown_wrap">
+        <select id="new_subdivision"><option value="">-- Select --</option></select>
+        <a href="#" onclick="toggleNewInput('sub'); return false;" style="font-size: 0.7em; color: #007bff;">+ Add New Subdivision</a>
+    </div>
+    <div id="sub_text_wrap" style="display:none;">
+        <input type="text" id="new_subdivision_manual" placeholder="Type New Subdivision Name...">
+        <a href="#" onclick="toggleNewInput('sub'); return false;" style="font-size: 0.7em; color: #dc3545;">- Back to List</a>
+    </div>
+</div>
+        <div class="form-group">
+    <label>Client Name</label>
+    <div id="client_dropdown_wrap">
+        <select id="new_client"><option value="">-- Select --</option></select>
+        <a href="#" onclick="toggleNewInput('client'); return false;" style="font-size: 0.7em; color: #007bff;">+ Add New Client</a>
+    </div>
+    <div id="client_text_wrap" style="display:none;">
+        <input type="text" id="new_client_manual" placeholder="Type New Client Name...">
+        <a href="#" onclick="toggleNewInput('client'); return false;" style="font-size: 0.7em; color: #dc3545;">- Back to List</a>
+    </div>
+</div>
+        <div class="form-group">
+            <label>Project Type</label>
+            <select id="new_project_type">
+                <option value="Residential House Stake">Residential House Stake</option>
+                <option value="Residential House Location Plan">Residential House Location</option>
+                <option value="Residential Foundation Survey">Residential Foundation Survey</option>
+                <option value="Residential Drainage Plan">Residential Drainage Plan</option>
+                <option value="Residential LGP">Residential LGP</option>
+                <option value="Residential Boundary As-Built">Residential Boundary As-Built</option>
+                <option value="Residential Boundary Control">Residential Boundary Control</option>
+                <option value="Residential Aerial Topo Survey">Residential Aerial Topo Survey</option>
+                <option value="Residential Arborist Report">Residential Arborist Report</option>
+                <option value="Residential Asbuilt">Residential Asbuilt</option>
+                <option value="Residential Basement Stake">Residential Basement Stake</option>
+                <option value="Residential Composite Map">Residential Composite Map</option>
+                <option value="Residential Concrete Check">Residential Concrete Check</option>
+                <option value="Residential Construction Staking">Residential Construction Staking</option>
+                <option value="Residential Courthouse Researc">Residential Courthouse Researc</option>
+                <option value="Residential Curb Painting">Residential Curb Painting</option>
+                <option value="Residential Data Reduction">Residential Data Reduction</option>
+                <option value="Residential Demo Plan">Residential Demo Plan</option>
+                <option value="Residential Drainage Study">Residential Drainage Study</option>
+                <option value="Residential Easement Plat">Residential Easement Plat</option>
+                <option value="Residential Elevation Cert">Residential Elevation Cert</option>
+                <option value="Residential Exhibit">Residential Exhibit</option>
+                <option value="Residential Extra">Residential Extra</option>
+                <option value="Residential Exemption Plat">Residential Exemption Plat</option>
+                <option value="Residential FHA Plot Plan">Residential FHA Plot Plan</option>
+                <option value="Residential Final Survey">Residential Final Survey</option>
+                <option value="Residential Flood Letter">Residential Flood Letter</option>
+                <option value="Residential Found. Elev Check">Residential Found. Elev Check</option>
+                <option value="Residential Global Positioning Control Pts.">Residential Global Positioning Control Pts.</option>
+                <option value="Residential Height Elevation">Residential Height Elevation</option>
+                <option value="Residential House Fit">Residential House Fit</option>
+                <option value="Residential Hydrology Study">Residential Hydrology Study</option>
+                <option value="Residential Land Disturbance Permit">Residential Land Disturbance Permit</option>
+                <option value="Residential Legal Description">Residential Legal Description</option>
+                <option value="Exhibit Plat">Exhibit Plat</option>
+                <option value="Residential Loan Survey">Residential Loan Survey</option>
+                <option value="Residential LOMA">Residential LOMA</option>
+                <option value="Residential Lot Division">Residential Lot Division</option>
+                <option value="Residential Lot Consolidation">Residential Lot Consolidation</option>
+                <option value="Residential Matrix">Residential Matrix</option>
+                <option value="Residential NOI">Residential NOI</option>
+                <option value="Residential Pad Elevation">Residential Pad Elevation</option>
+                <option value="Residential Pin Setting">Residential Pin Setting</option>
+                <option value="Residential Presentation Stake">Residential Presentation Stake</option>
+                <option value="Residential Property Line Stake">Residential Property Line Stake</option>
+                <option value="Residential Revision">Residential Revision</option>
+                <option value="Residential Septic Plan">Residential Septic Plan</option>
+                <option value="Residential Site Distance Surv">Residential Site Distance Surv</option>
+                <option value="Residential Site Plan">Residential Site Plan</option>
+                <option value="Residential Subdivision">Residential Subdivision</option>
+                <option value="Residential Tertiary">Residential Tertiary</option>
+                <option value="Residential Topographic Survey">Residential Topographic Survey</option>
+                <option value="Residential Limited Topo">Residential Limited Topo</option>
+                <option value="Residential Topo (GIS)">Residential Topo (GIS)</option>
+                <option value="Residential Travel Time">Residential Travel Time</option>
+                <option value="Residential Tree Location">Residential Tree Location</option>
+                <option value="Residential Utility Location">Residential Utility Location</option>
+                <option value="Residential Variance Plat">Residential Variance Plat</option>
+                <option value="Residential Water Quality Cert">Residential Water Quality Cert</option>
+                <option value="Residential Wetlands Location">Residential Wetlands Location</option>
+                <option value="Residential Zoning Plan">Residential Zoning Plan</option>
+                <option value="Commercial ALTA/ACSM">Commercial ALTA/ACSM</option>
+                <option value="Commercial ALTA/NSPS">Commercial ALTA/NSPS</option>
+                <option value="Commercial Arborist Report">Commercial Arborist Report</option>
+                <option value="Commercial As-built">Commercial As-built</option>
+                <option value="Commercial Boundary Control">Commercial Boundary Control</option>
+                <option value="Commercial Boundary As-Built">Commercial Boundary As-Built</option>
+                <option value="Commercial Building Staking">Commercial Building Staking</option>
+                <option value="Commercial Composite Map">Commercial Composite Map</option>
+                <option value="Commercial Construction Staking">Commercial Construction Staking</option>
+                <option value="Commercial Courthouse Research">Commercial Courthouse Research</option>
+                <option value="Commercial Easement Plat">Commercial Easement Plat</option>
+                <option value="Commercial Elevation Cert">Commercial Elevation Cert</option>
+                <option value="Commercial Exemption Plat">Commercial Exemption Plat</option>
+                <option value="Commercial Extra">Commercial Extra</option>
+                <option value="Commercial Expert Witness">Commercial Expert Witness</option>
+                <option value="Commercial Final Survey">Commercial Final Survey</option>
+                <option value="Commercial Flood Study">Commercial Flood Study</option>
+                <option value="Commercial Foundation Survey">Commercial Foundation Survey</option>
+                <option value="Commercial GPS">Commercial GPS</option>
+                <option value="Commercial Legal Certificate">Commercial Legal Certificate</option>
+                <option value="Commercial Legal Description">Commercial Legal Description</option>
+                <option value="Commercial Liquor License">Commercial Liquor License</option>
+                <option value="Commercial Pin Setting">Commercial Pin Setting</option>
+                <option value="Commercial Property Line Stake">Commercial Property Line Stake</option>
+                <option value="Commercial Revision">Commercial Revision</option>
+                <option value="Commercial Right of Way Survey">Commercial Right of Way Survey</option>
+                <option value="Sediment Erosion Control Plan">Sediment Erosion Control Plan</option>
+                <option value="Commercial Sewer Profile">Commercial Sewer Profile</option>
+                <option value="Commercial Storm Profile">Commercial Storm Profile</option>
+                <option value="Commercial Subdivision">Commercial Subdivision</option>
+                <option value="Commercial Title Search">Commercial Title Search</option>
+                <option value="Commercial Topographic Survey">Commercial Topographic Survey</option>
+                <option value="Commercial Limited Topo">Commercial Limited Topo</option>
+                <option value="Commercial GIS Topographic">Commercial GIS Topographic</option>
+                <option value="Commercial Travel Time">Commercial Travel Time</option>
+                <option value="Commercial Tree Location">Commercial Tree Location</option>
+                <option value="Commercial Utility Location">Commercial Utility Location</option>
+                <option value="Commercial Variance">Commercial Variance</option>
+                <option value="Commercial Wetlands">Commercial Wetlands</option>
+                <option value="Commercial Zoning Letter">Commercial Zoning Letter</option>
+                <option value="Commercial Zoning Plan">Commercial Zoning Plan</option>
+                <option value="RB/RA">RB/RA</option>
+                <option value="RDP/RE">RDP/RE</option>
+                <option value="RFS/RE">RFS/RE</option>
+                <option value="RHS/RE">RHS/RE</option>
+                <option value="OHLP/RE">OHLP/RE</option>
+                <option value="LGP/RE">LGP/RE</option>
+                <option value="OHLP/RFS">OHLP/RFS</option>
+                <option value="RHS/RPS">RHS/RPS</option>
+                <option value="TER/RE">TER/RE</option>
+                <option value="VAR/RE">VAR/RE</option>
+                <option value="Cancelled">Cancelled</option>
+                <option value="Engineering">Engineering</option>
+                <option value="Miscellaneous">Miscellaneous</option>
+                <option value="Printing/Reprographic Services">Printing/Reprographic Services</option>
+                <option value="Redo">Redo</option>
+                <option value="Multi-Phase Project">Multi-Phase Project</option>
+            </select>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <div style="flex: 1;"><label>Lat</label><input type="text" id="new_lat" readonly style="background: #eee;"></div>
+            <div style="flex: 1;"><label>Long</label><input type="text" id="new_lng" readonly style="background: #eee;"></div>
+        </div>
+        <button id="saveBtn">SAVE TO DATABASE</button>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const map = L.map('map').setView([34.0304, -84.5269], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+
+    const clusters = L.markerClusterGroup(); 
+    map.addLayer(clusters); 
+
+    const SUPABASE_URL = "https://italxfydjdwrhufaedwp.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0YWx4ZnlkamR3cmh1ZmFlZHdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDIwNjIsImV4cCI6MjA5MTU3ODA2Mn0.mJn7zNu32n9GAFHBcnHYzUNwicyGDFGL5cnG2Lj49aw"; 
+    
+    // Globalize these for console access and cross-function reliability
+    window._supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    window.allRawJobs = [];
+    window.allMarkers = [];
+    
+    let pendingJobNumber = null; 
+    const modal = document.getElementById("jobModal");
+
+    // --- 1. FIXED MARKER CREATION ---
+    function addMarkerToMap(job) {
+        const lat = parseFloat(job.latitude);
+        const lng = parseFloat(job.longitude);
+
+        // Clean validation: If coordinates are missing or not numbers, skip
+        if (!job.latitude || !job.longitude || isNaN(lat) || isNaN(lng)) {
+            console.warn(`Skipping Job #${job.job_number}: Invalid Coordinates (${job.latitude}, ${job.longitude})`);
+            return;
+        }
+
+        const marker = L.marker([lat, lng]);
+        
+        marker.bindPopup(`
+            <div style="min-width: 200px; font-family: 'Segoe UI', sans-serif;">
+                <h4 style="margin: 0 0 8px 0; color: #007bff; border-bottom: 1px solid #ddd; padding-bottom: 5px;">
+                    Job #${job.job_number}
+                </h4>
+                <div style="font-size: 0.9em; line-height: 1.4;">
+                    <p style="margin: 4px 0;"><b>Address:</b> ${job.address || '---'}</p>
+                    <p style="margin: 4px 0;"><b>Lot Number:</b> ${job.lot_number || 'N/A'}</p>
+                    <p style="margin: 4px 0;"><b>Project Type:</b> ${job.project_type || '---'}</p>
+                    <p style="margin: 4px 0;"><b>Client Name:</b> ${job.client_name || '---'}</p>
+                </div>
+                <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #ccc; font-size: 0.8em; color: #666;">
+                    <p style="margin: 2px 0;"><b>Subdivision:</b> ${job.subdivision || 'None'}</p>
+                    <p style="margin: 2px 0;"><b>Date Entered:</b> ${job.date_entered || '---'}</p>
+                </div>
+                <button onclick="openEditModal('${job.job_number}')" style="width:100%; margin-top:10px; background:#ffc107; color:black; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85em;">
+                    Edit Job Info
+                </button>
+            </div>
+        `);
+        
+        marker.jobData = job; 
+        clusters.addLayer(marker); 
+        window.allMarkers.push(marker);
+    }
+function autofillNextJobNumber() {
+        if (!window.allRawJobs || window.allRawJobs.length === 0) return;
+
+        // 1. Find all valid job numbers and convert to integers
+        const numbers = window.allRawJobs
+            .map(job => parseInt(job.job_number))
+            .filter(num => !isNaN(num));
+
+        // 2. Find the highest number and add 1
+        if (numbers.length > 0) {
+            const nextNum = Math.max(...numbers) + 1;
+            document.getElementById('new_job_number').value = nextNum;
+        }
+    }
+    // --- 2. DROPDOWN POPULATION ---
+    function populateSearchDropdowns() {
+        const counties = new Set();
+        const subdivisions = new Set();
+        const types = new Set();
+        const clients = new Set();
+
+        window.allRawJobs.forEach(job => {
+            if (job.county) counties.add(job.county.trim());
+            if (job.subdivision) subdivisions.add(job.subdivision.trim());
+            if (job.project_type) types.add(job.project_type.trim());
+            if (job.client_name) clients.add(job.client_name.trim());
+        });
+
+        const fill = (ids, set, label) => {
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const currentVal = el.value;
+                el.innerHTML = `<option value="">-- Select ${label} --</option>`;
+                Array.from(set).sort().forEach(val => {
+                    const opt = document.createElement('option');
+                    opt.value = val; opt.textContent = val;
+                    el.appendChild(opt);
+                });
+                el.value = currentVal;
+            });
+        };
+
+        fill(['search_county', 'new_county'], counties, "County");
+        fill(['search_subdivision', 'new_subdivision'], subdivisions, "Subdivision");
+        fill(['search_client', 'new_client'], clients, "Client");
+    }
+
+    // --- 3. DATABASE LOADING ---
+     async function loadJobsFromDatabase() {
+        // We ask for rows 0 through 3000 to ensure we get all 2065
+        const { data, error } = await window._supabase
+            .from('jobs')
+            .select('*')
+            .range(0, 3000)
+            .order('job_number', { ascending: false });
+
+        if (error) return console.error(error);
+        
+        window.allRawJobs = data; 
+        clusters.clearLayers();
+        window.allMarkers = [];
+        
+        // Add markers to map
+        data.forEach(job => addMarkerToMap(job));
+        
+        populateSearchDropdowns();
+        
+        // Update the header count
+        document.getElementById('job-count').innerText = `Total Database: ${data.length} Jobs`;
+        
+        // NOTE: We do NOT call applyCivilTrackerFilters() here 
+        // This keeps the sidebar list empty until a user searches
+    
+    // Update the UI count so you can see all 2065
+    document.getElementById('job-count').innerText = "Total Database: " + data.length + " Jobs";
+    
+   
+}
+
+    // --- 4. SEARCH & FILTERING (FIXED FOR TEXT COLUMN) ---
+    window.applyCivilTrackerFilters = function() {
+        const jobVal = document.getElementById('search_job_num').value.toLowerCase().trim();
+        const subVal = document.getElementById('search_subdivision').value.toLowerCase();
+        const countyVal = document.getElementById('search_county').value.toLowerCase();
+        const clientVal = document.getElementById('search_client').value.toLowerCase();
+        const addrVal = document.getElementById('search_address').value.toLowerCase().trim();
+        const typeVal = document.getElementById('search_type').value.toLowerCase();
+        
+        const dateInput = document.getElementById('search_date').value;
+        let formattedSearchDate = "";
+        if (dateInput) {
+            const [y, m, d] = dateInput.split('-');
+            formattedSearchDate = `${parseInt(m)}/${parseInt(d)}/${y}`;
+        }
+        
+        clusters.clearLayers();
+        let matchCount = 0;
+        let listHTML = `<div class="search-results-header"><div>Job #</div><div>Subdivision</div><div>Action</div></div>`;
+
+        window.allRawJobs.forEach(job => {
+            const jNum = String(job.job_number || "").toLowerCase().trim();
+            const jSub = String(job.subdivision || "").toLowerCase().trim();
+            const jCounty = String(job.county || "").toLowerCase().trim();
+            const jClient = String(job.client_name || "").toLowerCase().trim();
+            const jAddr = String(job.address || "").toLowerCase().trim();
+            const jType = String(job.project_type || "").toLowerCase().trim();
+
+            // 1. Standard matches (remove the 'isTarget' line entirely)
+        const mJob = !jobVal || jNum.includes(jobVal);
+        const mSub = !subVal || jSub === subVal;
+        const mCounty = !countyVal || jCounty === countyVal;
+        const mClient = !clientVal || jClient === clientVal;
+        const mAddr = !addrVal || jAddr.includes(addrVal);
+        const mType = !typeVal || jType === typeVal;
+        const mDate = !formattedSearchDate || (job.date_entered === formattedSearchDate);
+
+        // 2. The Clean If Statement (No more 27353 override)
+        if (mJob && mSub && mCounty && mClient && mAddr && mType && mDate) {
+            matchCount++;
+            
+            // Marker Link: Use '==' to bridge the gap between String and Number
+            const marker = window.allMarkers.find(m => String(m.jobData.job_number).trim() == jNum);
+            
+            if (marker) {
+                clusters.addLayer(marker);
+            }
+
+            const isMissing = !job.latitude || !job.longitude;
+            listHTML += `
+                <div class="search-result-row">
+                    <div style="color:${isMissing ? '#dc3545' : '#007bff'}; font-weight:bold;">${job.job_number}</div>
+                    <div>${job.subdivision || '---'}</div>
+                    <div>
+                        ${isMissing ? 
+                            `<button onclick="enterPlacementMode('${job.job_number}')" style="background:#dc3545; color:white; padding:4px; font-size:0.7em;">Set Loc</button>` : 
+                            `<button onclick="focusOnJob('${job.job_number}')" style="background:#28a745; color:white; padding:4px; font-size:0.7em;">View</button>`
+                        }
+                    </div>
+                </div>`;
+        }
+        });
+        document.getElementById('searchResultsList').innerHTML = listHTML;
+        document.getElementById('job-count').innerText = `Matches: ${matchCount}`;
+    };
+
+    // --- 5. EDIT MODAL & UPDATE LOGIC ---
+    window.openEditModal = function(jobNum) {
+        const job = window.allRawJobs.find(j => String(j.job_number).trim() == String(jobNum).trim());
+        if (!job) return;
+
+        document.getElementById('jobModal').dataset.currentId = job.id;
+        modal.style.display = 'block';
+        modal.querySelector('h2').innerText = "Edit Job #" + jobNum;
+
+        document.getElementById('new_job_number').value = job.job_number;
+        document.getElementById('new_job_number').readOnly = true;
+        document.getElementById('new_subdivision').value = job.subdivision || '';
+        document.getElementById('new_client').value = job.client_name || '';
+        document.getElementById('new_project_type').value = job.project_type || 'Residential House Stake';
+        document.getElementById('new_lot_number').value = job.lot_number || '';
+        document.getElementById('new_county').value = job.county || '';
+        document.getElementById('address_search').value = job.address || '';
+        document.getElementById('new_lat').value = job.latitude || '';
+        document.getElementById('new_lng').value = job.longitude || '';
+
+        const saveBtn = document.getElementById('saveBtn');
+        saveBtn.innerText = "UPDATE JOB INFO";
+        saveBtn.style.background = "#ffc107";
+        saveBtn.style.color = "black";
+        
+        saveBtn.onclick = async () => {
+            const subManual = document.getElementById('new_subdivision_manual').value;
+            const finalSub = subManual ? subManual : document.getElementById('new_subdivision').value;
+
+            const clientManual = document.getElementById('new_client_manual').value;
+            const finalClient = clientManual ? clientManual : document.getElementById('new_client').value;
+
+            const updatedData = {
+                subdivision: finalSub,
+                client_name: finalClient,
+                project_type: document.getElementById('new_project_type').value,
+                lot_number: document.getElementById('new_lot_number').value,
+                county: document.getElementById('new_county').value,
+                address: document.getElementById('address_search').value,
+                latitude: parseFloat(document.getElementById('new_lat').value) || 0,
+                longitude: parseFloat(document.getElementById('new_lng').value) || 0
+            };
+
+            const targetId = document.getElementById('jobModal').dataset.currentId;
+
+            const { data, error } = await window._supabase
+                .from('jobs')
+                .update(updatedData)
+                .match({ id: targetId }) 
+                .select();
+
+            if (error) {
+                alert("Update Failed: " + error.message);
+            } else if (data && data.length > 0) {
+                alert("Job Updated Successfully!");
+                modal.style.display = 'none';
+                await loadJobsFromDatabase();
+                applyCivilTrackerFilters();
+            } else {
+                alert("Database rejected update. Check RLS policies.");
+            }
+        };
+    };
+
+    // --- OTHER HELPERS ---
+    document.getElementById('openModalBtn').onclick = () => {
+        const modal = document.getElementById('jobModal');
+        
+        // 1. Reset Modal Header & Button Look
+        modal.querySelector('h2').innerText = "Log New Job";
+        const saveBtn = document.getElementById('saveBtn');
+        saveBtn.innerText = "SAVE TO DATABASE";
+        saveBtn.style.background = "#28a745"; // Green for new jobs
+        saveBtn.style.color = "white";
+        
+        // 2. Clear all fields for a fresh entry
+        document.getElementById('new_job_number').readOnly = false;
+        document.getElementById('new_job_number').value = '';
+        document.getElementById('new_lot_number').value = '';
+        document.getElementById('address_search').value = '';
+        document.getElementById('new_lat').value = '';
+        document.getElementById('new_lng').value = '';
+        document.getElementById('new_subdivision').value = '';
+        document.getElementById('new_client').value = '';
+        document.getElementById('new_county').value = '';
+        document.getElementById('new_subdivision_manual').value = '';
+        document.getElementById('new_client_manual').value = '';
+
+        // 3. IMPORTANT: Re-assign the click to INSERT logic
+        saveBtn.onclick = async () => {
+            // Get values from dropdowns or manual text boxes
+            const subManual = document.getElementById('new_subdivision_manual').value;
+            const finalSub = subManual ? subManual : document.getElementById('new_subdivision').value;
+
+            const clientManual = document.getElementById('new_client_manual').value;
+            const finalClient = clientManual ? clientManual : document.getElementById('new_client').value;
+
+            const today = new Date();
+            const formattedDate = (today.getMonth() + 1) + '/' + today.getDate() + '/' + today.getFullYear();
+
+            const jobData = {
+                job_number: document.getElementById('new_job_number').value,
+                subdivision: finalSub,
+                client_name: finalClient,
+                project_type: document.getElementById('new_project_type').value,
+                lot_number: document.getElementById('new_lot_number').value,
+                county: document.getElementById('new_county').value,
+                address: document.getElementById('address_search').value,
+                latitude: parseFloat(document.getElementById('new_lat').value),
+                longitude: parseFloat(document.getElementById('new_lng').value),
+                date_entered: formattedDate 
+            };
+
+            if (!jobData.job_number || isNaN(jobData.latitude)) {
+                alert("Please provide at least a Job Number and Map Location.");
+                return;
+            }
+
+            // Perform the INSERT
+            const { error } = await window._supabase.from('jobs').insert([jobData]);
+            
+            if (!error) { 
+                modal.style.display = "none"; 
+                alert("Job Logged!"); 
+                await loadJobsFromDatabase(); // Refresh map and list
+            } else {
+                alert("Error: " + error.message);
+            }
+        };
+        autofillNextJobNumber();
+        modal.style.display = "block";
+    };
+    window.focusOnJob = function(jobNum) {
+        const m = window.allMarkers.find(marker => String(marker.jobData.job_number).trim() == String(jobNum).trim());
+        if (m) { map.setView(m.getLatLng(), 18); m.openPopup(); }
+    };
+
+    document.getElementById('closeModal').onclick = () => { modal.style.display="none"; };
+    document.getElementById('applyFiltersBtn').onclick = applyCivilTrackerFilters;
+    document.getElementById('resetFiltersBtn').onclick = () => {
+    // 1. Reset all search boxes
+    document.getElementById('search_job_num').value = '';
+    document.getElementById('search_subdivision').value = '';
+    document.getElementById('search_county').value = '';
+    document.getElementById('search_client').value = '';
+    document.getElementById('search_address').value = '';
+    document.getElementById('search_type').value = '';
+    document.getElementById('search_date').value = '';
+
+    // 2. Clear the list visually
+    document.getElementById('searchResultsList').innerHTML = '';
+    document.getElementById('job-count').innerText = "Total Database: " + window.allRawJobs.length + " Jobs";
+
+    // 3. Put ALL pins back on the map
+    clusters.clearLayers();
+    window.allMarkers.forEach(m => clusters.addLayer(m));
+};
+// --- ADDRESS LOOKUP (Locate Button) ---
+    document.getElementById('lookupBtn').onclick = async () => {
+        const btn = document.getElementById('lookupBtn');
+        const addressInput = document.getElementById('address_search');
+        const latInput = document.getElementById('new_lat');
+        const lngInput = document.getElementById('new_lng');
+        
+        let address = addressInput.value;
+        
+        if (!address) {
+            alert("Please enter an address first.");
+            return;
+        }
+
+        // Force Georgia context for better accuracy
+        if (!address.toLowerCase().includes("georgia") && !address.toLowerCase().includes(", ga")) {
+            address += ", Georgia"; 
+        }
+
+        btn.innerText = "Searching...";
+        
+        // Georgia Bounding Box (keeps results local to the state)
+        const viewbox = "-85.6,33.5,-81.0,35.2"; 
+
+        try {
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&viewbox=${viewbox}&bounded=1`;
+            const response = await fetch(url);
+            const results = await response.json();
+
+            if (results.length > 0) {
+                const lat = parseFloat(results[0].lat);
+                const lon = parseFloat(results[0].lon);
+                
+                // Update the Lat/Lng boxes in the Modal
+                latInput.value = lat.toFixed(6);
+                lngInput.value = lon.toFixed(6);
+                
+                // Move the map and zoom in
+                map.flyTo([lat, lon], 17); 
+                
+                btn.innerText = "Locate";
+                btn.style.background = "#28a745"; 
+                btn.style.color = "white";
+                setTimeout(() => { 
+                    btn.style.background = ""; 
+                    btn.style.color = "";
+                }, 2000);
+            } else {
+                alert("Address not found. Try adding the city name.");
+                btn.innerText = "Locate";
+            }
+        } catch (err) {
+            console.error("Geocoding error:", err);
+            btn.innerText = "Error";
+        }
+    };
+
+    // --- INITIAL LOAD ---
+    loadJobsFromDatabase();
+});
+</script>
+</body>
+</html>
