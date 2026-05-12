@@ -49,7 +49,11 @@
             box-shadow: 2px 0 5px rgba(0,0,0,0.05);
         }
         
-        #map { flex: 1; background: #ddd; }
+        #map { 
+    flex: 1; 
+    height: 100vh; /* This tells the map to fill the full height of the screen */
+    background: #ddd; 
+}
         .form-group { margin-bottom: 15px; }
         label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.9em; }
         input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
@@ -88,12 +92,20 @@
                     <label>Subdivision</label>
                     <select id="search_subdivision"><option value="">All Subdivisions</option></select>
                 </div>
-
+                <div class="form-group">
+                    <label>Lot Number</label>
+                    <input type="text" id="search_lot_num" placeholder="Ex: 42">
+                </div>
                 <div class="form-group">
                     <label>Address</label>
                     <input type="text" id="search_address" placeholder="Search Street Name...">
                 </div>
 
+                <div class="form-group">
+                    <label>Land Lot</label>
+                    <input type="text" id="search_land_lot" placeholder="Ex: 922/923">
+                </div>
+                
                 <div class="form-group">
                     <label>Client Name</label>
                     <select id="search_client"><option value="">All Clients</option></select>
@@ -245,7 +257,7 @@
 </div>
 
 <div id="jobModal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
-    <div style="background-color: white; margin: 5% auto; padding: 25px; border-radius: 8px; width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative;">
+    <div style="background-color: white; margin: 20px auto; padding: 25px; border-radius: 8px; width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative; max-height: 90vh; overflow-y: auto;">
         <span id="closeModal" style="position: absolute; right: 20px; top: 10px; font-size: 28px; cursor: pointer;">&times;</span>
         <h2 style="margin-top: 0;">Log New Job</h2>
         <div class="form-group">
@@ -258,7 +270,11 @@
                 <input type="text" id="address_search" placeholder="123 Main St, City, GA">
                 <button id="lookupBtn" style="background:#6c757d; color:white; padding:0 10px;">Locate</button>
             </div>
-        </div>
+    </div>
+        <div class="form-group">
+        <label>Land Lot</label>
+            <input type="text" id="new_land_lot" placeholder="Ex: 922 or 922/923">
+    </div>
         <div class="form-group">
         <label>County</label>
         <select id="new_county">
@@ -424,33 +440,53 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Safety Check: Wait for libraries to load
+    if (typeof L === 'undefined' || typeof supabase === 'undefined') {
+        console.error("Leaflet or Supabase libraries not loaded. Retrying in 1 second...");
+        setTimeout(() => location.reload(), 1000);
+        return;
+    }
+
+    // --- INITIALIZE MAP ---
     const map = L.map('map').setView([34.0304, -84.5269], 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+        attribution: '© OpenStreetMap' 
+    }).addTo(map);
 
     const clusters = L.markerClusterGroup(); 
     map.addLayer(clusters); 
 
+    // --- SUPABASE CONFIG ---
     const SUPABASE_URL = "https://italxfydjdwrhufaedwp.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0YWx4ZnlkamR3cmh1ZmFlZHdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDIwNjIsImV4cCI6MjA5MTU3ODA2Mn0.mJn7zNu32n9GAFHBcnHYzUNwicyGDFGL5cnG2Lj49aw"; 
     
-    // Globalize these for console access and cross-function reliability
     window._supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     window.allRawJobs = [];
     window.allMarkers = [];
     
-    let pendingJobNumber = null; 
     const modal = document.getElementById("jobModal");
 
-    // --- 1. FIXED MARKER CREATION ---
+    // --- 1. TOGGLE INPUTS (FOR NEW SUB/CLIENT) ---
+    window.toggleNewInput = function(type) {
+        const drop = document.getElementById(type === 'sub' ? 'sub_dropdown_wrap' : 'client_dropdown_wrap');
+        const text = document.getElementById(type === 'sub' ? 'sub_text_wrap' : 'client_text_wrap');
+        
+        if (drop.style.display === 'none') {
+            drop.style.display = 'block';
+            text.style.display = 'none';
+            document.getElementById(type === 'sub' ? 'new_subdivision_manual' : 'new_client_manual').value = '';
+        } else {
+            drop.style.display = 'none';
+            text.style.display = 'block';
+        }
+    };
+
+    // --- 2. MARKER CREATION ---
     function addMarkerToMap(job) {
         const lat = parseFloat(job.latitude);
         const lng = parseFloat(job.longitude);
 
-        // Clean validation: If coordinates are missing or not numbers, skip
-        if (!job.latitude || !job.longitude || isNaN(lat) || isNaN(lng)) {
-            console.warn(`Skipping Job #${job.job_number}: Invalid Coordinates (${job.latitude}, ${job.longitude})`);
-            return;
-        }
+        if (!job.latitude || !job.longitude || isNaN(lat) || isNaN(lng)) return;
 
         const marker = L.marker([lat, lng]);
         
@@ -461,6 +497,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 </h4>
                 <div style="font-size: 0.9em; line-height: 1.4;">
                     <p style="margin: 4px 0;"><b>Address:</b> ${job.address || '---'}</p>
+                    <p style="margin: 4px 0;"><b>Land Lot:</b> ${job.land_lot || '---'}</p>
                     <p style="margin: 4px 0;"><b>Lot Number:</b> ${job.lot_number || 'N/A'}</p>
                     <p style="margin: 4px 0;"><b>Project Type:</b> ${job.project_type || '---'}</p>
                     <p style="margin: 4px 0;"><b>Client Name:</b> ${job.client_name || '---'}</p>
@@ -469,9 +506,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     <p style="margin: 2px 0;"><b>Subdivision:</b> ${job.subdivision || 'None'}</p>
                     <p style="margin: 2px 0;"><b>Date Entered:</b> ${job.date_entered || '---'}</p>
                 </div>
-                <button onclick="openEditModal('${job.job_number}')" style="width:100%; margin-top:10px; background:#ffc107; color:black; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85em;">
-                    Edit Job Info
-                </button>
+                <button onclick="generateWorkOrder('${job.job_number}')" style="flex: 1; background:#007bff; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85em;">
+                        Work Order
+                    </button>
+                    <button onclick="openEditModal('${job.job_number}')" style="flex: 1; background:#ffc107; color:black; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85em;">
+                        Edit Info
+                    </button>
+                </div>
             </div>
         `);
         
@@ -479,31 +520,16 @@ document.addEventListener('DOMContentLoaded', function() {
         clusters.addLayer(marker); 
         window.allMarkers.push(marker);
     }
-function autofillNextJobNumber() {
-        if (!window.allRawJobs || window.allRawJobs.length === 0) return;
 
-        // 1. Find all valid job numbers and convert to integers
-        const numbers = window.allRawJobs
-            .map(job => parseInt(job.job_number))
-            .filter(num => !isNaN(num));
-
-        // 2. Find the highest number and add 1
-        if (numbers.length > 0) {
-            const nextNum = Math.max(...numbers) + 1;
-            document.getElementById('new_job_number').value = nextNum;
-        }
-    }
-    // --- 2. DROPDOWN POPULATION ---
+    // --- 3. DROPDOWNS ---
     function populateSearchDropdowns() {
         const counties = new Set();
         const subdivisions = new Set();
-        const types = new Set();
         const clients = new Set();
 
         window.allRawJobs.forEach(job => {
             if (job.county) counties.add(job.county.trim());
             if (job.subdivision) subdivisions.add(job.subdivision.trim());
-            if (job.project_type) types.add(job.project_type.trim());
             if (job.client_name) clients.add(job.client_name.trim());
         });
 
@@ -527,13 +553,12 @@ function autofillNextJobNumber() {
         fill(['search_client', 'new_client'], clients, "Client");
     }
 
-    // --- 3. DATABASE LOADING ---
-     async function loadJobsFromDatabase() {
-        // We ask for rows 0 through 3000 to ensure we get all 2065
+    // --- 4. DATABASE LOADING ---
+    async function loadJobsFromDatabase() {
         const { data, error } = await window._supabase
             .from('jobs')
             .select('*')
-            .range(0, 3000)
+            .range(0, 5000) 
             .order('job_number', { ascending: false });
 
         if (error) return console.error(error);
@@ -542,26 +567,17 @@ function autofillNextJobNumber() {
         clusters.clearLayers();
         window.allMarkers = [];
         
-        // Add markers to map
         data.forEach(job => addMarkerToMap(job));
-        
         populateSearchDropdowns();
         
-        // Update the header count
-        document.getElementById('job-count').innerText = `Total Database: ${data.length} Jobs`;
-        
-        // NOTE: We do NOT call applyCivilTrackerFilters() here 
-        // This keeps the sidebar list empty until a user searches
-    
-    // Update the UI count so you can see all 2065
-    document.getElementById('job-count').innerText = "Total Database: " + data.length + " Jobs";
-    
-   
-}
+        document.getElementById('job-count').innerText = "Total Database: " + data.length + " Jobs";
+    }
 
-    // --- 4. SEARCH & FILTERING (FIXED FOR TEXT COLUMN) ---
+    // --- 5. SEARCH & FILTERING ---
     window.applyCivilTrackerFilters = function() {
         const jobVal = document.getElementById('search_job_num').value.toLowerCase().trim();
+        const lotNumVal = document.getElementById('search_lot_num').value.toLowerCase().trim();
+        const lotVal = document.getElementById('search_land_lot').value.toLowerCase().trim();
         const subVal = document.getElementById('search_subdivision').value.toLowerCase();
         const countyVal = document.getElementById('search_county').value.toLowerCase();
         const clientVal = document.getElementById('search_client').value.toLowerCase();
@@ -581,51 +597,44 @@ function autofillNextJobNumber() {
 
         window.allRawJobs.forEach(job => {
             const jNum = String(job.job_number || "").toLowerCase().trim();
+            const jLotNum = String(job.lot_number || "").toLowerCase().trim();
+            const jLandLot = String(job.land_lot || "").toLowerCase().trim();
             const jSub = String(job.subdivision || "").toLowerCase().trim();
             const jCounty = String(job.county || "").toLowerCase().trim();
             const jClient = String(job.client_name || "").toLowerCase().trim();
-            const jAddr = String(job.address || "").toLowerCase().trim();
+            const jAddr = String(job.address || "").toLowerCase();
             const jType = String(job.project_type || "").toLowerCase().trim();
 
-            // 1. Standard matches (remove the 'isTarget' line entirely)
-        const mJob = !jobVal || jNum.includes(jobVal);
-        const mSub = !subVal || jSub === subVal;
-        const mCounty = !countyVal || jCounty === countyVal;
-        const mClient = !clientVal || jClient === clientVal;
-        const mAddr = !addrVal || jAddr.includes(addrVal);
-        const mType = !typeVal || jType === typeVal;
-        const mDate = !formattedSearchDate || (job.date_entered === formattedSearchDate);
+            const mJob = !jobVal || jNum.includes(jobVal);
+            const mLotNum = !lotNumVal || jLotNum === lotNumVal;
+            const mLandLot = !lotVal || jLandLot.includes(lotVal);
+            const mSub = !subVal || jSub === subVal;
+            const mCounty = !countyVal || jCounty === countyVal;
+            const mClient = !clientVal || jClient === clientVal;
+            const mAddr = !addrVal || jAddr.includes(addrVal);
+            const mType = !typeVal || jType === typeVal;
+            const mDate = !formattedSearchDate || (job.date_entered === formattedSearchDate);
 
-        // 2. The Clean If Statement (No more 27353 override)
-        if (mJob && mSub && mCounty && mClient && mAddr && mType && mDate) {
-            matchCount++;
-            
-            // Marker Link: Use '==' to bridge the gap between String and Number
-            const marker = window.allMarkers.find(m => String(m.jobData.job_number).trim() == jNum);
-            
-            if (marker) {
-                clusters.addLayer(marker);
+            if (mJob && mLotNum && mLandLot && mSub && mCounty && mClient && mAddr && mType && mDate) {
+                matchCount++;
+                const marker = window.allMarkers.find(m => String(m.jobData.job_number).trim() == jNum);
+                if (marker) clusters.addLayer(marker);
+
+                listHTML += `
+                    <div class="search-result-row">
+                        <div style="font-weight:bold; color:#007bff;">${job.job_number}</div>
+                        <div>${job.subdivision || '---'}</div>
+                        <div>
+                            <button onclick="focusOnJob('${job.job_number}')" style="background:#28a745; color:white; padding:4px; font-size:0.7em;">View</button>
+                        </div>
+                    </div>`;
             }
-
-            const isMissing = !job.latitude || !job.longitude;
-            listHTML += `
-                <div class="search-result-row">
-                    <div style="color:${isMissing ? '#dc3545' : '#007bff'}; font-weight:bold;">${job.job_number}</div>
-                    <div>${job.subdivision || '---'}</div>
-                    <div>
-                        ${isMissing ? 
-                            `<button onclick="enterPlacementMode('${job.job_number}')" style="background:#dc3545; color:white; padding:4px; font-size:0.7em;">Set Loc</button>` : 
-                            `<button onclick="focusOnJob('${job.job_number}')" style="background:#28a745; color:white; padding:4px; font-size:0.7em;">View</button>`
-                        }
-                    </div>
-                </div>`;
-        }
         });
         document.getElementById('searchResultsList').innerHTML = listHTML;
         document.getElementById('job-count').innerText = `Matches: ${matchCount}`;
     };
 
-    // --- 5. EDIT MODAL & UPDATE LOGIC ---
+    // --- 6. EDIT MODAL ---
     window.openEditModal = function(jobNum) {
         const job = window.allRawJobs.find(j => String(j.job_number).trim() == String(jobNum).trim());
         if (!job) return;
@@ -638,12 +647,13 @@ function autofillNextJobNumber() {
         document.getElementById('new_job_number').readOnly = true;
         document.getElementById('new_subdivision').value = job.subdivision || '';
         document.getElementById('new_client').value = job.client_name || '';
-        document.getElementById('new_project_type').value = job.project_type || 'Residential House Stake';
+        document.getElementById('new_project_type').value = job.project_type || '';
         document.getElementById('new_lot_number').value = job.lot_number || '';
         document.getElementById('new_county').value = job.county || '';
         document.getElementById('address_search').value = job.address || '';
         document.getElementById('new_lat').value = job.latitude || '';
         document.getElementById('new_lng').value = job.longitude || '';
+        document.getElementById('new_land_lot').value = job.land_lot || '';
 
         const saveBtn = document.getElementById('saveBtn');
         saveBtn.innerText = "UPDATE JOB INFO";
@@ -653,11 +663,11 @@ function autofillNextJobNumber() {
         saveBtn.onclick = async () => {
             const subManual = document.getElementById('new_subdivision_manual').value;
             const finalSub = subManual ? subManual : document.getElementById('new_subdivision').value;
-
             const clientManual = document.getElementById('new_client_manual').value;
             const finalClient = clientManual ? clientManual : document.getElementById('new_client').value;
 
             const updatedData = {
+                land_lot: document.getElementById('new_land_lot').value,
                 subdivision: finalSub,
                 client_name: finalClient,
                 project_type: document.getElementById('new_project_type').value,
@@ -669,59 +679,44 @@ function autofillNextJobNumber() {
             };
 
             const targetId = document.getElementById('jobModal').dataset.currentId;
+            const { data, error } = await window._supabase.from('jobs').update(updatedData).match({ id: targetId }).select();
 
-            const { data, error } = await window._supabase
-                .from('jobs')
-                .update(updatedData)
-                .match({ id: targetId }) 
-                .select();
-
-            if (error) {
-                alert("Update Failed: " + error.message);
-            } else if (data && data.length > 0) {
-                alert("Job Updated Successfully!");
+            if (!error) {
+                alert("Job Updated!");
                 modal.style.display = 'none';
                 await loadJobsFromDatabase();
-                applyCivilTrackerFilters();
-            } else {
-                alert("Database rejected update. Check RLS policies.");
-            }
+            } else { alert("Error: " + error.message); }
         };
     };
 
-    // --- OTHER HELPERS ---
+    // --- 7. HELPERS & BUTTONS ---
+    function autofillNextJobNumber() {
+        if (!window.allRawJobs || window.allRawJobs.length === 0) return;
+        const numbers = window.allRawJobs.map(job => parseInt(job.job_number)).filter(num => !isNaN(num));
+        if (numbers.length > 0) {
+            document.getElementById('new_job_number').value = Math.max(...numbers) + 1;
+        }
+    }
+
     document.getElementById('openModalBtn').onclick = () => {
-        const modal = document.getElementById('jobModal');
-        
-        // 1. Reset Modal Header & Button Look
         modal.querySelector('h2').innerText = "Log New Job";
         const saveBtn = document.getElementById('saveBtn');
         saveBtn.innerText = "SAVE TO DATABASE";
-        saveBtn.style.background = "#28a745"; // Green for new jobs
+        saveBtn.style.background = "#28a745";
         saveBtn.style.color = "white";
         
-        // 2. Clear all fields for a fresh entry
         document.getElementById('new_job_number').readOnly = false;
         document.getElementById('new_job_number').value = '';
         document.getElementById('new_lot_number').value = '';
         document.getElementById('address_search').value = '';
         document.getElementById('new_lat').value = '';
         document.getElementById('new_lng').value = '';
-        document.getElementById('new_subdivision').value = '';
-        document.getElementById('new_client').value = '';
-        document.getElementById('new_county').value = '';
-        document.getElementById('new_subdivision_manual').value = '';
-        document.getElementById('new_client_manual').value = '';
 
-        // 3. IMPORTANT: Re-assign the click to INSERT logic
         saveBtn.onclick = async () => {
-            // Get values from dropdowns or manual text boxes
             const subManual = document.getElementById('new_subdivision_manual').value;
             const finalSub = subManual ? subManual : document.getElementById('new_subdivision').value;
-
             const clientManual = document.getElementById('new_client_manual').value;
             const finalClient = clientManual ? clientManual : document.getElementById('new_client').value;
-
             const today = new Date();
             const formattedDate = (today.getMonth() + 1) + '/' + today.getDate() + '/' + today.getFullYear();
 
@@ -738,25 +733,17 @@ function autofillNextJobNumber() {
                 date_entered: formattedDate 
             };
 
-            if (!jobData.job_number || isNaN(jobData.latitude)) {
-                alert("Please provide at least a Job Number and Map Location.");
-                return;
-            }
-
-            // Perform the INSERT
             const { error } = await window._supabase.from('jobs').insert([jobData]);
-            
             if (!error) { 
                 modal.style.display = "none"; 
                 alert("Job Logged!"); 
-                await loadJobsFromDatabase(); // Refresh map and list
-            } else {
-                alert("Error: " + error.message);
-            }
+                await loadJobsFromDatabase(); 
+            } else { alert("Error: " + error.message); }
         };
         autofillNextJobNumber();
         modal.style.display = "block";
     };
+
     window.focusOnJob = function(jobNum) {
         const m = window.allMarkers.find(marker => String(marker.jobData.job_number).trim() == String(jobNum).trim());
         if (m) { map.setView(m.getLatLng(), 18); m.openPopup(); }
@@ -765,81 +752,72 @@ function autofillNextJobNumber() {
     document.getElementById('closeModal').onclick = () => { modal.style.display="none"; };
     document.getElementById('applyFiltersBtn').onclick = applyCivilTrackerFilters;
     document.getElementById('resetFiltersBtn').onclick = () => {
-    // 1. Reset all search boxes
-    document.getElementById('search_job_num').value = '';
-    document.getElementById('search_subdivision').value = '';
-    document.getElementById('search_county').value = '';
-    document.getElementById('search_client').value = '';
-    document.getElementById('search_address').value = '';
-    document.getElementById('search_type').value = '';
-    document.getElementById('search_date').value = '';
-
-    // 2. Clear the list visually
-    document.getElementById('searchResultsList').innerHTML = '';
-    document.getElementById('job-count').innerText = "Total Database: " + window.allRawJobs.length + " Jobs";
-
-    // 3. Put ALL pins back on the map
-    clusters.clearLayers();
-    window.allMarkers.forEach(m => clusters.addLayer(m));
-};
-// --- ADDRESS LOOKUP (Locate Button) ---
-    document.getElementById('lookupBtn').onclick = async () => {
-        const btn = document.getElementById('lookupBtn');
-        const addressInput = document.getElementById('address_search');
-        const latInput = document.getElementById('new_lat');
-        const lngInput = document.getElementById('new_lng');
-        
-        let address = addressInput.value;
-        
-        if (!address) {
-            alert("Please enter an address first.");
-            return;
-        }
-
-        // Force Georgia context for better accuracy
-        if (!address.toLowerCase().includes("georgia") && !address.toLowerCase().includes(", ga")) {
-            address += ", Georgia"; 
-        }
-
-        btn.innerText = "Searching...";
-        
-        // Georgia Bounding Box (keeps results local to the state)
-        const viewbox = "-85.6,33.5,-81.0,35.2"; 
-
-        try {
-            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&viewbox=${viewbox}&bounded=1`;
-            const response = await fetch(url);
-            const results = await response.json();
-
-            if (results.length > 0) {
-                const lat = parseFloat(results[0].lat);
-                const lon = parseFloat(results[0].lon);
-                
-                // Update the Lat/Lng boxes in the Modal
-                latInput.value = lat.toFixed(6);
-                lngInput.value = lon.toFixed(6);
-                
-                // Move the map and zoom in
-                map.flyTo([lat, lon], 17); 
-                
-                btn.innerText = "Locate";
-                btn.style.background = "#28a745"; 
-                btn.style.color = "white";
-                setTimeout(() => { 
-                    btn.style.background = ""; 
-                    btn.style.color = "";
-                }, 2000);
-            } else {
-                alert("Address not found. Try adding the city name.");
-                btn.innerText = "Locate";
-            }
-        } catch (err) {
-            console.error("Geocoding error:", err);
-            btn.innerText = "Error";
-        }
+        document.getElementById('search_job_num').value = '';
+        document.getElementById('search_lot_num').value = '';
+        document.getElementById('search_land_lot').value = '';
+        document.getElementById('search_address').value = '';
+        document.getElementById('search_client').value = '';
+        document.getElementById('search_subdivision').value = '';
+        document.getElementById('search_date').value = '';
+        document.getElementById('search_type').value = '';
+        document.querySelectorAll('.sidebar input, .sidebar select').forEach(el => el.value = '');
+        document.getElementById('searchResultsList').innerHTML = '';
+        loadJobsFromDatabase();
     };
 
-    // --- INITIAL LOAD ---
+    document.getElementById('lookupBtn').onclick = async () => {
+        const addressInput = document.getElementById('address_search');
+        let address = addressInput.value;
+        if (!address) return alert("Enter an address.");
+        if (!address.toLowerCase().includes("ga")) address += ", Georgia";
+
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&viewbox=-85.6,33.5,-81.0,35.2&bounded=1`;
+        const response = await fetch(url);
+        const results = await response.json();
+
+        if (results.length > 0) {
+            const lat = parseFloat(results[0].lat);
+            const lon = parseFloat(results[0].lon);
+            document.getElementById('new_lat').value = lat.toFixed(6);
+            document.getElementById('new_lng').value = lon.toFixed(6);
+            map.flyTo([lat, lon], 17); 
+        } else { alert("Address not found."); }
+    };
+
+    // --- 8. WORK ORDER GENERATOR ---
+    window.generateWorkOrder = function(jobNum) {
+        const job = window.allRawJobs.find(j => String(j.job_number) === String(jobNum));
+        if (!job) return;
+        const printWindow = window.open('', '_blank', 'width=900,height=1000');
+        const html = `
+            <html><head><title>Work Order - ${job.job_number}</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 40px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                td { border: 2px solid black; padding: 15px; vertical-align: top; }
+                .section-title { font-weight: bold; text-decoration: underline; text-align: center; display: block; margin-bottom: 5px; }
+                .barcode { text-align: center; font-size: 30px; letter-spacing: 5px; }
+                @media print { .no-print { display: none; } }
+            </style></head>
+            <body>
+                <button class="no-print" onclick="window.print()">Print Report</button>
+                <table>
+                    <tr>
+                        <td><b>Order #:</b> ${job.job_number}<br><b>Date:</b> ${job.date_entered || '---'}</td>
+                        <td class="barcode">||||||||||||||||||||||<br><small>${job.job_number}</small></td>
+                    </tr>
+                    <tr>
+                        <td><span class="section-title">Parcel Legal</span><b>Subdivision:</b> ${job.subdivision || '---'}<br><b>Lot:</b> ${job.lot_number || '---'}</td>
+                        <td><span class="section-title">Client Info</span><b>Name:</b> ${job.client_name || '---'}</td>
+                    </tr>
+                    <tr><td colspan="2"><span class="section-title">Address</span>${job.address || '---'}</td></tr>
+                </table>
+            </body + ></html + >;`
+        printWindow.document.write(html);
+        printWindow.document.close();
+    };
+
+    // Start App
     loadJobsFromDatabase();
 });
 </script>
