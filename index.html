@@ -299,7 +299,9 @@
         <div class="form-group">
     <label>Client Name</label>
     <div id="client_dropdown_wrap">
-        <select id="new_client"><option value="">-- Select --</option></select>
+        <select id="new_client" onchange="autoFillClientDetails(this.value)">
+    <option value="">-- Select Client --</option>
+</select>
         <a href="#" onclick="toggleNewInput('client'); return false;" style="font-size: 0.7em; color: #007bff;">+ Add New Client</a>
     </div>
     <div id="client_text_wrap" style="display:none;">
@@ -490,6 +492,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const marker = L.marker([lat, lng]);
         
+        // Safety: Stringify the job object to pass it into the button correctly
+        const jobJson = JSON.stringify(job).replace(/'/g, "&apos;");
+
         marker.bindPopup(`
             <div style="min-width: 200px; font-family: 'Segoe UI', sans-serif;">
                 <h4 style="margin: 0 0 8px 0; color: #007bff; border-bottom: 1px solid #ddd; padding-bottom: 5px;">
@@ -506,7 +511,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     <p style="margin: 2px 0;"><b>Subdivision:</b> ${job.subdivision || 'None'}</p>
                     <p style="margin: 2px 0;"><b>Date Entered:</b> ${job.date_entered || '---'}</p>
                 </div>
-                <button onclick="generateWorkOrder('${job.job_number}')" style="flex: 1; background:#007bff; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85em;">
+                <div style="display: flex; gap: 5px; margin-top: 10px;">
+                    <button onclick='generateWorkOrder(${jobJson})' style="flex: 1; background:#007bff; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85em;">
                         Work Order
                     </button>
                     <button onclick="openEditModal('${job.job_number}')" style="flex: 1; background:#ffc107; color:black; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85em;">
@@ -571,6 +577,20 @@ document.addEventListener('DOMContentLoaded', function() {
         populateSearchDropdowns();
         
         document.getElementById('job-count').innerText = "Total Database: " + data.length + " Jobs";
+    }
+
+    window.autoFillClientDetails = async function(clientName) {
+        if (!clientName) return;
+        const { data, error } = await window._supabase
+            .from('clients')
+            .select('*')
+            .eq('company_name', clientName)
+            .single();
+
+        if (data) {
+            window.currentClientDetails = data; 
+            console.log("Client details loaded:", data);
+        }
     }
 
     // --- 5. SEARCH & FILTERING ---
@@ -687,6 +707,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 await loadJobsFromDatabase();
             } else { alert("Error: " + error.message); }
         };
+
+        // Also update the Print button if it exists in your Edit Modal UI
+        const printBtn = document.getElementById('printWorkOrderBtn');
+        if(printBtn) {
+            printBtn.onclick = () => window.generateWorkOrder(job);
+        }
     };
 
     // --- 7. HELPERS & BUTTONS ---
@@ -752,14 +778,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('closeModal').onclick = () => { modal.style.display="none"; };
     document.getElementById('applyFiltersBtn').onclick = applyCivilTrackerFilters;
     document.getElementById('resetFiltersBtn').onclick = () => {
-        document.getElementById('search_job_num').value = '';
-        document.getElementById('search_lot_num').value = '';
-        document.getElementById('search_land_lot').value = '';
-        document.getElementById('search_address').value = '';
-        document.getElementById('search_client').value = '';
-        document.getElementById('search_subdivision').value = '';
-        document.getElementById('search_date').value = '';
-        document.getElementById('search_type').value = '';
         document.querySelectorAll('.sidebar input, .sidebar select').forEach(el => el.value = '');
         document.getElementById('searchResultsList').innerHTML = '';
         loadJobsFromDatabase();
@@ -785,37 +803,74 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     // --- 8. WORK ORDER GENERATOR ---
-    window.generateWorkOrder = function(jobNum) {
-        const job = window.allRawJobs.find(j => String(j.job_number) === String(jobNum));
-        if (!job) return;
-        const printWindow = window.open('', '_blank', 'width=900,height=1000');
-        const html = `
-            <html><head><title>Work Order - ${job.job_number}</title>
-            <style>
-                body { font-family: Arial, sans-serif; padding: 40px; }
-                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                td { border: 2px solid black; padding: 15px; vertical-align: top; }
-                .section-title { font-weight: bold; text-decoration: underline; text-align: center; display: block; margin-bottom: 5px; }
-                .barcode { text-align: center; font-size: 30px; letter-spacing: 5px; }
-                @media print { .no-print { display: none; } }
-            </style></head>
-            <body>
-                <button class="no-print" onclick="window.print()">Print Report</button>
-                <table>
-                    <tr>
-                        <td><b>Order #:</b> ${job.job_number}<br><b>Date:</b> ${job.date_entered || '---'}</td>
-                        <td class="barcode">||||||||||||||||||||||<br><small>${job.job_number}</small></td>
-                    </tr>
-                    <tr>
-                        <td><span class="section-title">Parcel Legal</span><b>Subdivision:</b> ${job.subdivision || '---'}<br><b>Lot:</b> ${job.lot_number || '---'}</td>
-                        <td><span class="section-title">Client Info</span><b>Name:</b> ${job.client_name || '---'}</td>
-                    </tr>
-                    <tr><td colspan="2"><span class="section-title">Address</span>${job.address || '---'}</td></tr>
-                </table>
-            </body + ></html + >;`
-        printWindow.document.write(html);
-        printWindow.document.close();
-    };
+    window.generateWorkOrder = async function(job) {
+    if (typeof job === 'string') {
+        job = window.allRawJobs.find(j => String(j.job_number).trim() === job.trim());
+    }
+    if (!job) return alert("Job data not found.");
+
+    const printWindow = window.open('', '_blank', 'width=900,height=800');
+
+    // Fetch the client details (including billing_address)
+    const { data: client } = await window._supabase
+        .from('clients')
+        .select('*')
+        .eq('company_name', job.client_name)
+        .single();
+
+    const html = `
+    <html>
+    <head>
+        <title>Work Order - ${job.job_number}</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 40px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            td { border: 2px solid black; padding: 15px; vertical-align: top; }
+            .section-title { font-weight: bold; text-decoration: underline; text-align: center; display: block; margin-bottom: 8px; }
+            @media print { .no-print { display: none; } }
+        </style>
+    </head>
+    <body>
+        <button class="no-print" onclick="window.print()">Print Report</button>
+        <table>
+            <tr>
+                <td colspan="2" style="text-align: center; font-size: 1.2em;">
+                    <b>Order #:</b> ${job.job_number} &nbsp;&nbsp;&nbsp; <b>Date:</b> ${job.date_entered || '---'}
+                </td>
+            </tr>
+            <tr>
+                <td style="width: 50%;">
+                    <span class="section-title">Parcel Legal</span>
+                    <b>Address:</b> ${job.address || '---'}<br>
+                    <b>Subdivision:</b> ${job.subdivision || '---'}<br>
+                    <b>Lot:</b> ${job.lot_number || '---'}<br>
+                    <b>Land Lot:</b> ${job.land_lot || '---'}
+                </td>
+                
+                <td style="width: 50%;">
+                    <span class="section-title">Client Information</span>
+                    <b>Name:</b> ${job.client_name || '---'}<br>
+                    ${client ? `
+                        ${client.contact_name || ''}<br>
+                        ${client.email || ''}<br>
+                        ${client.phone_number || ''}
+                    ` : '<i>No additional info found</i>'}
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <span class="section-title">Billing Information</span>
+                    <div style="text-align: center;">
+                        ${client && client.billing_address ? client.billing_address : '<i>No billing address on file</i>'}
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </body` + `></html` + `>`;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+};
 
     // Start App
     loadJobsFromDatabase();
