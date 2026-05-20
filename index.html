@@ -235,9 +235,13 @@
                         <option value="Multi-Phase Project">Multi-Phase Project</option>
                     </select>
                 </div>
-                <div class="form-group">
-    <label>Date Entered</label>
-    <input type="date" id="search_date">
+                <div class="sidebar-group" style="margin-bottom: 15px;">
+    <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.9em;">Date Range Logged</label>
+    <div style="display: flex; gap: 5px; align-items: center;">
+        <input type="date" id="search_date_start" style="flex: 1; padding: 6px; font-size: 0.85em; border: 1px solid #ccc; border-radius: 4px;">
+        <span style="font-size: 0.85em; color: #666;">to</span>
+        <input type="date" id="search_date_end" style="flex: 1; padding: 6px; font-size: 0.85em; border: 1px solid #ccc; border-radius: 4px;">
+    </div>
 </div>
 
                 <button id="applyFiltersBtn" style="width:100%; margin-top:10px; padding: 12px; background:#6c757d; color:white; border:none; border-radius:4px; font-weight:bold;">Search</button>
@@ -265,12 +269,15 @@
             <input type="text" id="new_job_number">
         </div>
         <div class="form-group">
-            <label>Address Lookup</label>
-            <div style="display: flex; gap: 5px;">
-                <input type="text" id="address_search" placeholder="123 Main St, City, GA">
-                <button id="lookupBtn" style="background:#6c757d; color:white; padding:0 10px;">Locate</button>
-            </div>
+    <label>Address Lookup (Search or Type Manually)</label>
+    <div style="display: flex; gap: 5px;">
+        <input type="text" id="address_search" placeholder="123 Main St, City, GA or Type Custom Location Description">
+        <button type="button" id="lookupBtn">Locate</button>
     </div>
+    <button type="button" id="manualLocateBtn" style="margin-top: 8px; width: 100%; background: #6c757d; color: white; border: none; padding: 6px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.85em;">
+        📍 Manual Locate (Pick on Map)
+    </button>
+</div>
         <div class="form-group">
         <label>Land Lot</label>
             <input type="text" id="new_land_lot" placeholder="Ex: 922 or 922/923">
@@ -521,6 +528,65 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
         `);
+
+        // --- NEW: RIGHT-CLICK EVENT LISTENER ---
+       marker.on('contextmenu', function(e) {
+            // Prevent standard browser right-click menu
+            L.DomEvent.preventDefault(e);
+
+            // Create a custom copy-focused bubble layout
+            const copyPopupContent = `
+                <div style="min-width: 200px; font-family: 'Segoe UI', sans-serif;">
+                    <h4 style="margin: 0 0 8px 0; color: #dc3545; border-bottom: 1px solid #ddd; padding-bottom: 5px;">
+                        Clone Job #${job.job_number}
+                    </h4>
+                    <div style="font-size: 0.9em; line-height: 1.4; color: #555; margin-bottom: 10px;">
+                        <p style="margin: 4px 0;"><b>Subdivision:</b> ${job.subdivision || 'None'}</p>
+                        <p style="margin: 4px 0;"><b>Client:</b> ${job.client_name || '---'}</p>
+                        <p style="margin: 4px 0;"><b>Project Type:</b> ${job.project_type || '---'}</p>
+                        <p style="margin: 4px 0; font-size: 0.85em; color: #888;"><i>Click below to use this job's details as a template for a new entry.</i></p>
+                    </div>
+                    <button onclick="window.handleCopyJobSetup('${job.job_number}')" style="width:100%; background:#dc3545; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85em;">
+                        📋 Copy Job Details
+                    </button>
+                </div>
+            `;
+
+            // Instead of re-binding permanently, just open this HTML as a temporary popup right on the marker
+            marker.bindPopup(copyPopupContent).openPopup();
+
+            // When the copy popup closes, change the popup content back to its original left-click layout 
+            // WITHOUT calling addMarkerToMap again (preventing duplicate pins)
+            marker.once('popupclose', function() {
+                const originalLeftClickContent = `
+                    <div style="min-width: 200px; font-family: 'Segoe UI', sans-serif;">
+                        <h4 style="margin: 0 0 8px 0; color: #007bff; border-bottom: 1px solid #ddd; padding-bottom: 5px;">
+                            Job #${job.job_number}
+                        </h4>
+                        <div style="font-size: 0.9em; line-height: 1.4;">
+                            <p style="margin: 4px 0;"><b>Address:</b> ${job.address || '---'}</p>
+                            <p style="margin: 4px 0;"><b>Land Lot:</b> ${job.land_lot || '---'}</p>
+                            <p style="margin: 4px 0;"><b>Lot Number:</b> ${job.lot_number || 'N/A'}</p>
+                            <p style="margin: 4px 0;"><b>Project Type:</b> ${job.project_type || '---'}</p>
+                            <p style="margin: 4px 0;"><b>Client Name:</b> ${job.client_name || '---'}</p>
+                        </div>
+                        <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #ccc; font-size: 0.8em; color: #666;">
+                            <p style="margin: 2px 0;"><b>Subdivision:</b> ${job.subdivision || 'None'}</p>
+                            <p style="margin: 2px 0;"><b>Date Entered:</b> ${job.date_entered || '---'}</p>
+                        </div>
+                        <div style="display: flex; gap: 5px; margin-top: 10px;">
+                            <button onclick='generateWorkOrder(${jobJson})' style="flex: 1; background:#007bff; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85em;">
+                                Work Order
+                            </button>
+                            <button onclick="openEditModal('${job.job_number}')" style="flex: 1; background:#ffc107; color:black; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85em;">
+                                Edit Info
+                            </button>
+                        </div>
+                    </div>
+                `;
+                marker.bindPopup(originalLeftClickContent);
+            });
+        });
         
         marker.jobData = job; 
         clusters.addLayer(marker); 
@@ -565,7 +631,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .from('jobs')
             .select('*')
             .range(0, 5000) 
-            .order('job_number', { ascending: false });
+            .order('job_number', { ascending: true });
 
         if (error) return console.error(error);
         
@@ -595,63 +661,177 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- 5. SEARCH & FILTERING ---
     window.applyCivilTrackerFilters = function() {
-        const jobVal = document.getElementById('search_job_num').value.toLowerCase().trim();
-        const lotNumVal = document.getElementById('search_lot_num').value.toLowerCase().trim();
-        const lotVal = document.getElementById('search_land_lot').value.toLowerCase().trim();
-        const subVal = document.getElementById('search_subdivision').value.toLowerCase();
-        const countyVal = document.getElementById('search_county').value.toLowerCase();
-        const clientVal = document.getElementById('search_client').value.toLowerCase();
-        const addrVal = document.getElementById('search_address').value.toLowerCase().trim();
-        const typeVal = document.getElementById('search_type').value.toLowerCase();
+        // Prevent crashes by making sure currentFilteredJobs is explicitly tracked globally
+        window.currentFilteredJobs = [];
+
+        const jobVal = document.getElementById('search_job_num') ? document.getElementById('search_job_num').value.toLowerCase().trim() : '';
+        const lotNumVal = document.getElementById('search_lot_num') ? document.getElementById('search_lot_num').value.toLowerCase().trim() : '';
+        const lotVal = document.getElementById('search_land_lot') ? document.getElementById('search_land_lot').value.toLowerCase().trim() : '';
+        const subVal = document.getElementById('search_subdivision') ? document.getElementById('search_subdivision').value.toLowerCase() : '';
+        const countyVal = document.getElementById('search_county') ? document.getElementById('search_county').value.toLowerCase() : '';
+        const clientVal = document.getElementById('search_client') ? document.getElementById('search_client').value.toLowerCase() : '';
+        const addrVal = document.getElementById('search_address') ? document.getElementById('search_address').value.toLowerCase().trim() : '';
+        const typeVal = document.getElementById('search_type') ? document.getElementById('search_type').value.toLowerCase() : '';
         
-        const dateInput = document.getElementById('search_date').value;
-        let formattedSearchDate = "";
-        if (dateInput) {
-            const [y, m, d] = dateInput.split('-');
-            formattedSearchDate = `${parseInt(m)}/${parseInt(d)}/${y}`;
-        }
+        // Grab the date range inputs safely
+        const startInput = document.getElementById('search_date_start') ? document.getElementById('search_date_start').value : '';
+        const endInput = document.getElementById('search_date_end') ? document.getElementById('search_date_end').value : '';
         
-        clusters.clearLayers();
+        const startDateObj = startInput ? new Date(startInput + 'T00:00:00') : null;
+        const endDateObj = endInput ? new Date(endInput + 'T23:59:59') : null;
+        
+        if (clusters) clusters.clearLayers();
         let matchCount = 0;
-        let listHTML = `<div class="search-results-header"><div>Job #</div><div>Subdivision</div><div>Action</div></div>`;
 
-        window.allRawJobs.forEach(job => {
-            const jNum = String(job.job_number || "").toLowerCase().trim();
-            const jLotNum = String(job.lot_number || "").toLowerCase().trim();
-            const jLandLot = String(job.land_lot || "").toLowerCase().trim();
-            const jSub = String(job.subdivision || "").toLowerCase().trim();
-            const jCounty = String(job.county || "").toLowerCase().trim();
-            const jClient = String(job.client_name || "").toLowerCase().trim();
-            const jAddr = String(job.address || "").toLowerCase();
-            const jType = String(job.project_type || "").toLowerCase().trim();
+        let listHTML = `
+            <div class="search-results-header" style="display: grid; grid-template-columns: 70px 1fr 110px; gap: 5px; font-weight: bold; padding: 5px; border-bottom: 2px solid #ddd;">
+                <div>Job #</div>
+                <div>Address</div>
+                <div style="text-align: center;">Action</div>
+            </div>`;
 
-            const mJob = !jobVal || jNum.includes(jobVal);
-            const mLotNum = !lotNumVal || jLotNum === lotNumVal;
-            const mLandLot = !lotVal || jLandLot.includes(lotVal);
-            const mSub = !subVal || jSub === subVal;
-            const mCounty = !countyVal || jCounty === countyVal;
-            const mClient = !clientVal || jClient === clientVal;
-            const mAddr = !addrVal || jAddr.includes(addrVal);
-            const mType = !typeVal || jType === typeVal;
-            const mDate = !formattedSearchDate || (job.date_entered === formattedSearchDate);
+        if (window.allRawJobs) {
+            window.allRawJobs.forEach(job => {
+                const jNum = String(job.job_number || "").toLowerCase().trim();
+                const jLotNum = String(job.lot_number || "").toLowerCase().trim();
+                const jLandLot = String(job.land_lot || "").toLowerCase().trim();
+                const jSub = String(job.subdivision || "").toLowerCase().trim();
+                const jCounty = String(job.county || "").toLowerCase().trim();
+                const jClient = String(job.client_name || "").toLowerCase().trim();
+                const jAddr = String(job.address || "").toLowerCase();
+                const jType = String(job.project_type || "").toLowerCase().trim();
 
-            if (mJob && mLotNum && mLandLot && mSub && mCounty && mClient && mAddr && mType && mDate) {
-                matchCount++;
-                const marker = window.allMarkers.find(m => String(m.jobData.job_number).trim() == jNum);
-                if (marker) clusters.addLayer(marker);
+                const mJob = !jobVal || jNum.includes(jobVal);
+                const mLotNum = !lotNumVal || jLotNum === lotNumVal;
+                const mLandLot = !lotVal || jLandLot.includes(lotVal);
+                const mSub = !subVal || jSub === subVal;
+                const mCounty = !countyVal || jCounty === countyVal;
+                const mClient = !clientVal || jClient === clientVal;
+                const mAddr = !addrVal || jAddr.includes(addrVal);
+                const mType = !typeVal || jType === typeVal;
 
-                listHTML += `
-                    <div class="search-result-row">
+                // Date Range Check
+                let mDate = true; // Default to true if no filters are selected
+
+            if (startInput || endInput) {
+                if (job.date_entered) {
+                    // job.date_entered is already formatted as YYYY-MM-DD from Supabase!
+                    const jobDateText = String(job.date_entered).trim(); 
+
+                    // Directly compare the text strings alphabetically/chronologically
+                    if (startInput && jobDateText < startInput) mDate = false;
+                    if (endInput && jobDateText > endInput) mDate = false;
+                } else {
+                    // Hide rows that have blank dates if the user is filtering by a date range
+                    mDate = false;
+                }
+            }
+
+                if (mJob && mLotNum && mLandLot && mSub && mCounty && mClient && mAddr && mType && mDate) {
+                    matchCount++;
+                    window.currentFilteredJobs.push(job);
+
+                    if (window.allMarkers) {
+                        const marker = window.allMarkers.find(m => String(m.jobData.job_number).trim() == jNum);
+                        if (marker && clusters) clusters.addLayer(marker);
+                    }
+
+                    listHTML += `
+                    <div class="search-result-row" style="display: grid; grid-template-columns: 70px 1fr 110px; gap: 5px; align-items: center; padding: 6px 0; border-bottom: 1px solid #eee; font-size: 0.9em;">
                         <div style="font-weight:bold; color:#007bff;">${job.job_number}</div>
-                        <div>${job.subdivision || '---'}</div>
-                        <div>
-                            <button onclick="focusOnJob('${job.job_number}')" style="background:#28a745; color:white; padding:4px; font-size:0.7em;">View</button>
+                        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${job.address || '---'}">${job.address || '---'}</div>
+                        <div style="display: flex; gap: 4px;">
+                            <button onclick="focusOnJob('${job.job_number}')" style="background:#28a745; color:white; border:none; padding:4px 6px; font-size:0.8em; border-radius:3px; cursor:pointer; flex: 1;">View</button>
+                            <button onclick="openEditModal('${job.job_number}')" style="background:#ffc107; color:black; border:none; padding:4px 6px; font-size:0.8em; border-radius:3px; cursor:pointer; flex: 1; font-weight: bold;">Edit</button>
                         </div>
                     </div>`;
+                }
+            });
+        }
+
+        const resultsEl = document.getElementById('searchResultsList');
+        if (resultsEl) {
+            if (matchCount > 0) {
+                const printListBtnHtml = `
+                    <button onclick="window.printFilteredList()" style="width: 100%; margin-bottom: 10px; background: #17a2b8; color: white; border: none; padding: 8px; border-radius: 4px; font-weight: bold; cursor: pointer;">
+                        🖨️ Print Filtered List (${matchCount} Rows)
+                    </button>`;
+                resultsEl.innerHTML = printListBtnHtml + listHTML;
+            } else {
+                resultsEl.innerHTML = listHTML + `<div style="text-align:center; padding:10px; color:#666;">No matches found</div>`;
             }
+        }
+
+        const countEl = document.getElementById('job-count');
+        if (countEl) countEl.innerText = `Matches: ${matchCount}`;
+    };
+
+    // --- 8. MASTER PRINT LOG ENGINE (Exposed to Global Scope) ---
+    window.printFilteredList = function() {
+        if (!window.currentFilteredJobs || window.currentFilteredJobs.length === 0) {
+            return alert("No results available to print.");
+        }
+
+        const printWindow = window.open('', '_blank', 'width=1000,height=800');
+        if (!printWindow) return alert("Pop-up blocked! Please allow pop-ups to print logs.");
+        
+        let rowsHtml = '';
+        window.currentFilteredJobs.forEach(job => {
+            rowsHtml += `
+                <tr>
+                    <td>${job.job_number || '---'}</td>
+                    <td>${job.date_entered || '---'}</td>
+                    <td>${job.address || '---'}</td>
+                    <td>${job.subdivision || '---'}</td>
+                    <td>${job.lot_number || '---'}</td>
+                    <td>${job.project_type || '---'}</td>
+                    <td>${job.client_name || '---'}</td>
+                </tr>
+            `;
         });
-        document.getElementById('searchResultsList').innerHTML = listHTML;
-        document.getElementById('job-count').innerText = `Matches: ${matchCount}`;
+
+        const html = `
+        <html>
+        <head>
+            <title>CivilTracker - Filtered Job List</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
+                h2 { margin-bottom: 5px; color: #111; }
+                .meta { font-size: 0.9em; color: #666; margin-bottom: 20px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #999; padding: 8px; text-align: left; font-size: 0.85em; }
+                th { background-color: #f2f2f2; font-weight: bold; }
+                tr:nth-child(even) { background-color: #fafafa; }
+                @media print { 
+                    .no-print { display: none; } 
+                    body { padding: 0; }
+                }
+            </style>
+        </head>
+        <body>
+            <button class="no-print" onclick="window.print()" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; margin-bottom: 20px;">Print List</button>
+            <h2>Exported Job Log</h2>
+            <div class="meta">Generated on: ${new Date().toLocaleDateString()} | Total Records: ${window.currentFilteredJobs.length}</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Job #</th>
+                        <th>Date Logged</th>
+                        <th>Property Address</th>
+                        <th>Subdivision</th>
+                        <th>Lot</th>
+                        <th>Project Type</th>
+                        <th>Client</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+        </body` + `></html` + `>`;
+
+        printWindow.document.write(html);
+        printWindow.document.close();
     };
 
     // --- 6. EDIT MODAL ---
@@ -713,6 +893,85 @@ document.addEventListener('DOMContentLoaded', function() {
         if(printBtn) {
             printBtn.onclick = () => window.generateWorkOrder(job);
         }
+    };
+
+    // --- CLONE ENGINE WORKFLOW ---
+    window.handleCopyJobSetup = function(jobNum) {
+        // 1. Locate the master template source job
+        const sourceJob = window.allRawJobs.find(j => String(j.job_number).trim() == String(jobNum).trim());
+        if (!sourceJob) return alert("Source job template not found.");
+
+        // 2. Open the Log New Job Modal and update its header state
+        modal.style.display = 'block';
+        modal.querySelector('h2').innerText = "Log New Job (Cloned from #" + jobNum + ")";
+        
+        // Remove any old dataset links so the system knows this is an INSERT, not an UPDATE
+        delete document.getElementById('jobModal').dataset.currentId;
+
+        // 3. Keep the template values completely editable for the operator
+        document.getElementById('new_job_number').readOnly = false;
+        document.getElementById('new_subdivision').value = sourceJob.subdivision || '';
+        document.getElementById('new_client').value = sourceJob.client_name || '';
+        document.getElementById('new_project_type').value = sourceJob.project_type || '';
+        document.getElementById('new_county').value = sourceJob.county || '';
+        document.getElementById('new_land_lot').value = sourceJob.land_lot || '';
+
+        // 4. Wipe out the specific old physical lot details so you don't accidentally double-log them
+        document.getElementById('new_lot_number').value = '';
+        document.getElementById('address_search').value = '';
+        document.getElementById('new_lat').value = '';
+        document.getElementById('new_lng').value = '';
+
+        // 5. Calculate and advance the job number counter sequentially
+        if (window.allRawJobs && window.allRawJobs.length > 0) {
+            const numbers = window.allRawJobs.map(j => parseInt(j.job_number)).filter(num => !isNaN(num));
+            if (numbers.length > 0) {
+                document.getElementById('new_job_number').value = Math.max(...numbers) + 1;
+            }
+        }
+
+        // 6. Map the Save Button explicitly to handle an INSERT execution rule
+        const saveBtn = document.getElementById('saveBtn');
+        saveBtn.innerText = "SAVE CLONED JOB";
+        saveBtn.style.background = "#dc3545"; // Red style indicating clone mode action
+        saveBtn.style.color = "white";
+
+        saveBtn.onclick = async () => {
+            const subManual = document.getElementById('new_subdivision_manual').value;
+            const finalSub = subManual ? subManual : document.getElementById('new_subdivision').value;
+            const clientManual = document.getElementById('new_client_manual').value;
+            const finalClient = clientManual ? clientManual : document.getElementById('new_client').value;
+            
+            // Format current date matching your standard ISO setup (YYYY-MM-DD)
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            const formattedDate = `${yyyy}-${mm}-${dd}`;
+
+            const clonedJobData = {
+                job_number: document.getElementById('new_job_number').value,
+                subdivision: finalSub,
+                client_name: finalClient,
+                project_type: document.getElementById('new_project_type').value,
+                lot_number: document.getElementById('new_lot_number').value,
+                county: document.getElementById('new_county').value,
+                address: document.getElementById('address_search').value,
+                land_lot: document.getElementById('new_land_lot').value,
+                latitude: parseFloat(document.getElementById('new_lat').value) || 0,
+                longitude: parseFloat(document.getElementById('new_lng').value) || 0,
+                date_entered: formattedDate 
+            };
+
+            const { error } = await window._supabase.from('jobs').insert([clonedJobData]);
+            if (!error) { 
+                modal.style.display = "none"; 
+                alert("New Job Logged from Template!"); 
+                await loadJobsFromDatabase(); 
+            } else { 
+                alert("Database Error: " + error.message); 
+            }
+        };
     };
 
     // --- 7. HELPERS & BUTTONS ---
@@ -780,6 +1039,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('resetFiltersBtn').onclick = () => {
         document.querySelectorAll('.sidebar input, .sidebar select').forEach(el => el.value = '');
         document.getElementById('searchResultsList').innerHTML = '';
+        document.getElementById('search_date_start').value = '';
+        document.getElementById('search_date_end').value = '';
         loadJobsFromDatabase();
     };
 
@@ -802,6 +1063,77 @@ document.addEventListener('DOMContentLoaded', function() {
         } else { alert("Address not found."); }
     };
 
+    // --- MANUAL MAP PICKER WORKFLOW ---
+    document.getElementById('manualLocateBtn').onclick = function() {
+        // 1. Hide the modal temporarily
+        modal.style.display = "none";
+        
+        // 2. Change the map cursor to a crosshair to signal "pick mode"
+        document.getElementById('map').style.cursor = 'crosshair';
+        
+        // 3. Inform the user visually (optional but helpful toast/alert)
+        const tip = document.createElement('div');
+        tip.id = "map-pick-tip";
+        tip.innerHTML = "🎯 Click anywhere on the map to set coordinates...";
+        tip.style = "position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 20px; z-index: 2000; font-family: Arial; font-weight: bold;";
+        document.body.appendChild(tip);
+
+        // 4. Set up a one-time click listener on the map
+        map.once('click', function(e) {
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+
+            // Fill the form inputs behind the scenes
+            document.getElementById('new_lat').value = lat.toFixed(6);
+            document.getElementById('new_lng').value = lng.toFixed(6);
+
+            // Clean up the crosshair cursor and the helpful floating tip
+            document.getElementById('map').style.cursor = '';
+            const existingTip = document.getElementById('map-pick-tip');
+            if (existingTip) existingTip.remove();
+
+            // 5. Reopen the modal with everything preserved!
+            modal.style.display = "block";
+            
+            // Visual check: Fly the map slightly to center on their chosen pin
+            map.flyTo([lat, lng], map.getZoom());
+        });
+    };
+
+    // --- GLOBAL ESCAPE KEY LISTENER ---
+    window.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' || e.keyCode === 27) {
+            // 1. Close any open marker bubbles on the Leaflet map
+            if (map) {
+                map.closePopup();
+            }
+
+            // 2. FORCE CANCEL THE MANUAL MAP PICKER IF ACTIVE
+            // Reset the cursor style back to default
+            const mapEl = document.getElementById('map');
+            if (mapEl) mapEl.style.cursor = '';
+            
+            // Remove the floating floating tip message if it exists
+            const existingTip = document.getElementById('map-pick-tip');
+            if (existingTip) existingTip.remove();
+            
+            // CRITICAL: Tells Leaflet to stop waiting for that map click!
+            if (map) {
+                map.off('click'); 
+            }
+
+            // 3. Close the Log/Edit Job Modal if open
+            const jobModal = document.getElementById("jobModal");
+            if (jobModal && jobModal.style.display === 'block') {
+                if (window.tempNewJobMarker) {
+                    map.removeLayer(window.tempNewJobMarker);
+                    window.tempNewJobMarker = null;
+                }
+                jobModal.style.display = "none";
+            }
+        }
+    });
+    
     // --- 8. WORK ORDER GENERATOR ---
     window.generateWorkOrder = async function(job) {
     if (typeof job === 'string') {
@@ -848,14 +1180,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 </td>
                 
                 <td style="width: 50%;">
-                    <span class="section-title">Client Information</span>
-                    <b>Name:</b> ${job.client_name || '---'}<br>
-                    ${client ? `
-                        ${client.contact_name || ''}<br>
-                        ${client.email || ''}<br>
-                        ${client.phone_number || ''}
-                    ` : '<i>No additional info found</i>'}
-                </td>
+    <span class="section-title">Client Information</span>
+    <b>Company:</b> ${job.client_name || '---'}<br>
+    ${client ? `
+        <b>Contact:</b> ${client.contact_name || '---'}<br>
+        ${client.email || ''}<br>
+        ${client.phone_number || ''}
+    ` : '<i>No additional info found</i>'}
+</td>
             </tr>
             <tr>
                 <td colspan="2">
