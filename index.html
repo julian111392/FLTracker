@@ -629,8 +629,8 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadJobsFromDatabase() {
         const { data, error } = await window._supabase
             .from('jobs')
-            .select('*')
-            .range(0, 5000) 
+            .select('id, job_number, address, land_lot, lot_number, project_type, client_name, subdivision, county, date_entered, latitude, longitude')
+            .range(0, 1000000) 
             .order('job_number', { ascending: true });
 
         if (error) return console.error(error);
